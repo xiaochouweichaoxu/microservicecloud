@@ -1,0 +1,263 @@
+集成了21种技术之多，微服务架构技术的集合体。
+1.Eureka  /,jʊ(ə)'riːkə/：服务的注册与发现
+2.Ribbon /'rɪbən/ : 负载均衡
+3.Feign /feɪn/：负载均衡
+4.Hystrix /hɪst' rɪks/:断路器(熔断器)
+5.zuul:路由网关
+6.SpringCloud Config分布式配置中心
+微服务的大意就是把业务独立模块化，每个业务模块一个部署一个服务，一个项目有多个服务，有多个进程。
+Dubbo是基于rpc的远程服务调用
+SpringCloud是基于HTTP的（RESTful API）
+SpringBoot是专注于快速，方便的开发单个微服务个体，SpringCloud关注的全局的服务治理框架。
+客户端调用提供者暴露的接口，写一个配置类ConfigBean 加注解@Configuration
+加  RestTemplate对象
+@Bean
+@LoadBalanced
+public RestTemplate getRestTemplate() {
+    return new RestTemplate();
+}
+Controller里加
+@Autowired
+private RestTemplate restTemplate;
+@RequestMapping(value = "/consumer/dept/get/{id}")
+public Dept get(@PathVariable("id") Long id) {
+    return restTemplate.getForObject("http://MICROSERVICECLOUD-DEPT" + "/dept/get/" + id, Dept.class);
+}
+RestTemplate是什么？
+提供了多种便捷访问远程Http服务的方法，是一种便捷的访问restful服务的模板类，是Spring提供的用于访问Rest服务的客户端模板工具集
+***ForObject(url, 入参参数，HTTP响应转换被转换成的对象类型（例如list.class）);
+
+1.Eureka  /,jʊ(ə)'riːkə/  是什么？服务注册与发现
+Netflix在设计Eureka时遵守的是AP原则
+类似于Dubbo的注册中心zookeeper，Eureka实现服务发现与注册，只需要使用服务的标识符，就可以访问到服务。
+Eureka采用了C-S的设计架构。Eureka Server作为服务注册功能的服务器，它是注册中心。
+而系统中的其他微服务，使用Eureka的客户端连接到Eureka Server并维持心跳连接。这样系统的维护人员就可以通过Eureka Server来监控系统中的各个微服务是否正常运行SpringCloud的一些其他模块（比如Zuul）就可以通过Eureka Server来发现系统中的其他微服务，并执行相关的逻辑。
+Eureka有两个组件：Eureka Server 和 Eureka Client
+Eureka Server:提供服务的注册服务
+Eureka Client:是一个java客户端，用于简化Eureka Server的交互，客户端同时也具备一个内置的，使用轮询负载算法的负载均衡器，在应用启动后，将会向Eureka Server发送心跳（默认周期为30秒）如果Eureka Server在多个心跳周期内没有接收到某个节点的心跳，Eureka Server将会从服务注册表中把这个节点移除（默认90秒）
+
+Eureka服务的启动类上加@SpringBootApplication还要加@EnableEurekaServer
+@EnableEurekaServer表示开启Eureka服务
+
+Eureka 的自我保护机制：某一个微服务不可用了，Eureka 不会立刻清理，依旧会对该微服务的信息进行保存
+
+Eureka 集群搭建
+1.部署3台eureka服务，在application.yml中配置各自不同的端口号，和hostname，defaultZone这个字段各自分别写上其他eureka服务的hostname+端口号
+例如：
+server:
+  port: 7001
+
+eureka:
+  instance:
+    hostname: eureka7001.com #eureka服务端的实例名称
+  client:
+    register-with-eureka: false     #false表示不向注册中心注册自己。
+    fetch-registry: false     #false表示自己端就是注册中心，我的职责就是维护服务实例，并不需要去检索服务
+    service-url:
+      defaultZone: http://eureka7002.com:7002/eureka/,http://eureka7003.com:7003/eureka/
+
+2.然后提供者服务的application。yml中defaultZone: http://eureka7001.com:7001/eureka/,http://eureka7002.com:7002/eureka/,http://eureka7003.com:7003/eureka/   要配置上全部的eureka的hostname+端口号
+3.找到C:\Windows\System32\drivers\etc的hosts文件添加如下：
+ 127.0.0.1       eureka7001.com
+ 127.0.0.1       eureka7002.com
+ 127.0.0.1       eureka7003.com
+
+传统的数据库遵守ACID原则（原子性，一致性，独立性，持久性）mysql是CA
+NSql数据库遵守CAP（强一致性，可用性，分区容错性）mongodb和redis达到CP
+Eureka遵守AP原则（可用性，分区容错性）
+ZK遵守CP（强一致性，分区容错性）zk集群在选举期间的时间太长30-120m，这期间注册服务不能用
+Eureka的各个节点是平等的，都能够实现服务注册，而且还有一种自我保护机制，在15分内超过85%的节点都没有正常的心跳，那么就会认为客户端与注册中心出现了网络故障，此时会出现以下几种情况：
+1.Eureka不再从注册中心列表中移除因为长时间没收到心跳而应该过期的服务
+2.Eureka仍然能够接收到新服务的注册和查询请求，但是不会同步到其他节点
+3.当网络稳定，当前实例新的注册信息	会被同步到其他节点中
+
+2.Ribbon /'rɪbən/：负载均衡
+Ribbon实现的一套客户端	 负载均衡的工具，负载均衡（Load Balance简称LB）springcloud的负载均衡算法可以自定义。
+负载均衡分为2中1.集中式L（偏硬件）2.进程内的（偏软件）
+1.在客户端的application.yml文件中配置
+eureka:
+  client:
+    register-with-eureka: false
+    service-url:
+      defaultZone: http://eureka7001.com:7001/eureka/,http://eureka7002.com:7002/eureka/,http://eureka7003.com:7003/eureka/
+2.在客户端的 RestTemplate实例方法上加注解@LoadBalanced
+3.把客户端中的http://ip+端口改为http://Eureka中注册的微服务项目名称（用了Ribbon，直接访问注册中心中注册的服务名称）
+
+Ribbon在工作时分成2步
+1.先选择EurekaServer,它优先选择在同一个区域内负载较少的server
+2.再根据用户指定的策略（默认是：轮询），从server取到服务注册列表中选择一个地址，然后去访问对应的服务
+
+Ribbon的核心组件IRule:实现负载均衡算法
+在配置类ConfigBean中加入bean 例如：如下（显示的指定算法）
+    @Bean
+    public IRule myRule() {
+        return new RandomRule();// 随机
+//        return new RetryRule();
+    }
+自定义负载均衡算法  在启动类上加注解@RibbonClient(name="MICROSERVICECLOUD-DEPT",configuration=MySelfRule.class)
+@Configuration
+public class MySelfRule {
+    @Bean
+    public IRule myRule() {
+       // return new RandomRule();
+        return new RandomRule_LW();
+    }
+}
+RandomRule_LW类中就是具体的算法
+自定义的算法类不能放在@ComponentScan注解定义的当前目录和子目录下
+
+3.Feign :负载均衡
+Feign是一个声明式Web Service客户端，
+1.使用方法是定义一个接口，然后在上面添加注解@FeignClient
+2.客户端启动类加注解@EnableFeignClients(basePackages= {"com.atguigu.springcloud"})
+Feign可以与Eureka和Ribbon组合使用以支持负载均衡
+例如：
+@FeignClient(value = "MICROSERVICECLOUD-DEPT",fallbackFactory=DeptClientServiceFallbackFactory.class)
+public interface DeptClientService
+{
+    @RequestMapping(value = "/dept/get/{id}", method = RequestMethod.GET)
+    public Dept get(@PathVariable("id") long id);
+}
+
+Feign集成了Ribbon,利用Ribbon维护了(****服务名称)的服务列表信息，并通过轮询实现了客户端的负载均衡，与Ribbon不同的是，通过Feign只需要定义服务绑定接口且以声明式的方法，优雅而简单地实现了服务的调用。
+
+4.Hystrix:是什么？断路器(熔断器)！
+作用：主要做服务熔断，服务降级的处理。类似spring里的前置通知，环绕通知之类的
+一串逻辑要调用A.B.C.D假如其中的C调不通，这串逻辑的请求越多，就会积压越多，造成“服务雪崩"
+Hystrix的作用就是，在这种情况下，调不通得的服务就调不通就好，不管他，弃车保帅。
+向调用方返回一个符合预期的，可处理的备选响应（FallBack）,而不是长时间的等待或者抛出调用方无法处理的异常，这样就保证了服务调用方的线程不会被长时间，不必要的占用，从而避免了故障在分布式系统中的蔓延，乃至雪崩。
+功能：服务熔断，服务降级，服务限流，接近实时的监控等
+Hystrix的代码实现：
+1.添加pom依赖
+2.修改applicatiob.yml中的instance-id
+3.有一套连接数据库的mapper
+以下是实现服务熔断需要添加的
+服务熔断：简单来说就是查询时出现异常，返回异常处理信息，是在服务端实现的
+4.在启动类添加注解@EnableCircuitBreaker//对hystrixR熔断机制的支持
+5.在Controller中的对应方法上添加注解@HystrixCommand(fallbackMethod = "processHystrix_Get")
+6.实现processHystrix_Get方法用于返回可处理的备选响应信息。
+以下是实现服务降级需要添加的
+服务降级：整体资源快不够了，忍痛将某一些服务先关掉，待渡过难关，再开启回来，是在客户端实现的
+以下是实现降级需要添加的
+4.在公共api子项目的对外提供的接口上添加注解
+@FeignClient(value = "MICROSERVICECLOUD-DEPT",fallbackFactory=DeptClientServiceFallbackFactory.class)
+5.DeptClientServiceFallbackFactory这个类
+implements FallbackFactory<DeptClientService>接口
+比如：
+@Component
+public class DeptClientServiceFallbackFactory implements FallbackFactory<DeptClientService> {
+    @Override
+    public DeptClientService create(Throwable throwable) {
+        return new DeptClientService() {
+            @Override
+            public Dept get(long id) {
+                return new Dept().setDeptno(id).setDname("该ID：" + id + "没有没有对应的信息,Consumer客户端提供的降级信息,此刻服务Provider已经关闭")
+                        .setDb_source("no this database in MySQL");
+            }
+            @Override
+            public List<Dept> list() {
+                return null;
+            }
+            @Override
+            public boolean add(Dept dept) {
+                return false;
+            }
+        };
+    }
+}
+6.在客户端的application.yml中添加
+feign:
+  hystrix:
+    enabled: true
+
+以下是实现服务监控需要添加的
+1.新建***hystrix-dashboard的工程
+2.引入pom依赖
+3.在启动类上添加注解@EnableHystrixDashboard
+4.所有的提供者都要添加pom依赖
+<!-- actuator监控信息完善 -->
+<dependency>
+    <groupId>org.springframework.boot</groupId>
+    <artifactId>spring-boot-starter-actuator</artifactId>
+</dependency>
+5.http://ip:port/hystrix.stream 查看实时监控信息
+目前课程讲的监控只监控了 实现了服务熔断的提供者，没有讲实现了服务降级的提供者
+5.zuul：路由网关
+包含了对请求的路由和过滤两个最主要的功能
+其中路由的功能负责将外部请求转发到具体的微服务实例上，是实现外部访问统一入口的基础，
+而过滤器功能则负责对请求的处理过程进行干预，是实现请求校验，服务聚合等功能的基础。
+Zuul自身注册为Eureka服务治理下的应用，同时从Eureka中获取其他微服务的消息，也即以后的访问微服务都是通过Zuul跳转后获得。
+提供=代理+路由+过滤  三大功能
+
+1.新建一个Zuul的微服务
+2.导入pom依赖
+3.新建application.yml,修改instance-id: gateway-9527.com
+4.在启动类上添加注解@EnableZuulProxy
+5.找到C:\Windows\System32\drivers\etc的hosts文件添加如下：
+   127.0.0.1       myzuul.com
+实现对外暴露统一的域名
+zuul:
+  prefix: /atguigu  #统一前缀
+  ignored-services: "*" #不具体到那一个微服务，表示全部
+  routes:
+    mydept.serviceId: microservicecloud-dept #这个microservicecloud-dept微服务用mydept来代替
+    mydept.path: /mydept/**
+
+6.SpringCloud Config分布式配置中心是什么？集中式管理配置文件的方式
+SpringCloud Config为微服务架构中的微服务提供集中化的外部配置支持，配置服务器为各个不同的微服务应用的所有环境提供了一个中心化的外部配置。
+SpringCloud Config分为服务端和客户端两部分
+服务端也称为分布式配置中心	，它是一个独立的微服务应用，用来连接配置服务器并为客户端提供获取配置信息，加密/解密等访问接口。
+客户端则是通过指定的配置中心来管理应用资源，以及与	业务相关的配置内容，并在启动的时候从配置中心获取和加载配置信息，配置服务器默认采用git来存储配置信息，这样就有助于对环境配置进行版本管理，并且可以通过git客户端工具来方便的管理和访问配置内容。
+
+新建配置中心服务端
+1.需要在github上创建microservicecloud-config项目
+2. git clone ssh路径把项目拉取到本地文件夹
+3.在本地文件夹里创建application.yml
+4.pwd 查看当前路径
+5.git status 查看	当前文件夹的状态
+6.git add .   git commit -m "init file" 把新的文件提交到临时库
+7.git push origin master 提交到远程仓库
+
+1.新建项目microservicecloud-config-3344
+2.导入pom依赖
+3.新建application.yml
+spring:
+  application:
+    name:  microservicecloud-config
+  cloud:
+    config:
+      server:
+        git:
+          uri: git@github.com:xiaochouweichaoxu/microservicecloud-config.git #GitHub上面的git仓库名字
+4.启动了上要加注解@EnableConfigServer
+5.找到C:\Windows\System32\drivers\etc的hosts文件添加如下：
+   127.0.0.1       config-3344.com
+6.启动3344项目，在浏览器中输入  http://config-3344.com:3344/application-dev.yml 用于访问
+新建配置中心客户端
+1.需要在github上创建microservicecloud-config项目
+2. git clone ssh路径把项目拉取到本地文件夹
+3.在本地文件夹里创建microservicecloud-config-client.yml
+4.pwd 查看当前路径
+5.git status 查看	当前文件夹的状态
+6.git add .   git commit -m "init file" 把新的文件提交到临时库
+7.git push origin master 提交到远程仓库
+1.新建项目microservicecloud-config-client-3355
+2.导入pom依赖
+3.新建application.yml
+spring:
+  application:
+    name: microservicecloud-config-client#需要从github上读取的资源名称，注意没有yml后缀名
+4..新建bootstrap.yml
+(application.yml 是用户级的资源配置项
+ bootstrap.yml 是系统级的，优先级更高)
+spring:
+  cloud:
+    config:
+      name: microservicecloud-config-client #需要从github上读取的资源名称，注意没有yml后缀名
+      profile: test   #本次访问的配置项
+      label: master
+      uri: http://config-3344.com:3344  #本微服务启动后先去找3344号服务，通过SpringCloudConfig获取GitHub的服务地址
+5.找到C:\Windows\System32\drivers\etc的hosts文件添加如下：
+   127.0.0.1       client-config.com
+总结来说：SpringCloud Config分为服务端和客户端两部分，服务端通过一个ssh或是https的url访问到github上的外部配置资源文件，客户端再通过在自己的配置文件中的服务端url访问到服务端，这样就读到了对应的配置文件信息（dev或是test环境的信息）
+对于分布式配置来说，服务端就是配置中心这个微服务，客户端泛指（提供者，消费者，注册中心，负载均衡，断路器，路由）
